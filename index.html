@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لعبة XO أونلاين - العب مع صديق</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.2);
+            width: 100%;
+            max-width: 500px;
+            text-align: center;
+        }
+        h1 {
+            color: #2d3436;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+        .subtitle {
+            color: #636e72;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+        .menu {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        button {
+            padding: 18px;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.2em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        #createBtn {
+            background: #00b894;
+            color: white;
+        }
+        #createBtn:hover {
+            background: #00a085;
+            transform: translateY(-3px);
+        }
+        .join-section {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        #roomCode {
+            flex: 1;
+            padding: 18px;
+            border: 2px solid #dfe6e9;
+            border-radius: 12px;
+            font-size: 1.1em;
+            text-align: center;
+        }
+        #joinBtn {
+            background: #0984e3;
+            color: white;
+        }
+        #joinBtn:hover {
+            background: #0770c4;
+            transform: translateY(-3px);
+        }
+        #message {
+            margin-top: 25px;
+            padding: 15px;
+            border-radius: 10px;
+            font-weight: bold;
+            display: none;
+        }
+        .error {
+            background: #ffeaa7;
+            color: #d63031;
+            display: block !important;
+        }
+        .success {
+            background: #a3e4d7;
+            color: #00b894;
+            display: block !important;
+        }
+        .room-info {
+            margin-top: 30px;
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 12px;
+            display: none;
+        }
+        #shareLink {
+            background: #f1f2f6;
+            padding: 12px;
+            border-radius: 8px;
+            font-family: monospace;
+            margin: 10px 0;
+            word-break: break-all;
+        }
+        .copy-btn {
+            background: #636e72;
+            color: white;
+            padding: 10px 20px;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎮 XO أونلاين</h1>
+        <p class="subtitle">العب مع صديق في الوقت الحقيقي</p>
+        
+        <div class="menu">
+            <button id="createBtn" onclick="createGame()">
+                <span>➕</span> إنشاء غرفة جديدة
+            </button>
+            
+            <div class="join-section">
+                <input type="text" id="roomCode" placeholder="أدخل كود الغرفة (6 أحرف)" maxlength="6">
+                <button id="joinBtn" onclick="joinGame()">
+                    <span>🚪</span> انضم
+                </button>
+            </div>
+        </div>
+        
+        <div id="message" class="message"></div>
+        
+        <div class="room-info" id="roomInfo">
+            <h3>🔗 شارك الرابط مع صديقك:</h3>
+            <div id="shareLink"></div>
+            <button class="copy-btn" onclick="copyLink()">📋 نسخ الرابط</button>
+            <p style="margin-top: 10px; color: #636e72;">
+                في انتظار انضمام اللاعب الثاني...
+            </p>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js"></script>
+
+    <script>
+        // 🔥 تهيئة Firebase - باستخدام مفاتيحك
+        const firebaseConfig = {
+            apiKey: "AIzaSyAWRddTDbmhRBSpdpNQBCdUm1G1LNVc7Lc",
+            authDomain: "zidan-7e48c.firebaseapp.com",
+            databaseURL: "https://zidan-7e48c-default-rtdb.firebaseio.com",
+            projectId: "zidan-7e48c",
+            storageBucket: "zidan-7e48c.firebasestorage.app",
+            messagingSenderId: "102950879698",
+            appId: "1:102950879698:web:9f8ac8e9005b886102c80b",
+            measurementId: "G-98F5QNDTRE"
+        };
+
+        // Initialize Firebase
+        const app = firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+        
+        // إنشاء معرف فريد للاعب
+        let playerId = localStorage.getItem('playerId');
+        if (!playerId) {
+            playerId = 'player_' + Math.random().toString(36).substring(2, 9);
+            localStorage.setItem('playerId', playerId);
+        }
+
+        // 📌 وظيفة إنشاء غرفة جديدة
+        function createGame() {
+            const roomCode = generateRoomCode();
+            const gameRef = database.ref('games/' + roomCode);
+            
+            const gameData = {
+                board: ['', '', '', '', '', '', '', '', ''],
+                currentPlayer: 'X',
+                players: {
+                    [playerId]: 'X'
+                },
+                status: 'waiting',
+                turn: playerId,
+                createdAt: Date.now(),
+                lastMove: null
+            };
+            
+            gameRef.set(gameData).then(() => {
+                // عرض رابط المشاركة
+                const roomInfo = document.getElementById('roomInfo');
+                const shareLink = document.getElementById('shareLink');
+                const fullLink = `${window.location.origin}${window.location.pathname}?room=${roomCode}`;
+                
+                shareLink.textContent = fullLink;
+                roomInfo.style.display = 'block';
+                
+                showMessage(`✅ تم إنشاء الغرفة: ${roomCode}`, 'success');
+                
+                // انتقل إلى لعبة بعد 3 ثواني تلقائياً
+                setTimeout(() => {
+                    window.location.href = `game.html?room=${roomCode}&player=${playerId}`;
+                }, 3000);
+            }).catch(error => {
+                showMessage(`❌ خطأ: ${error.message}`, 'error');
+            });
+        }
+
+        // 📌 وظيفة الانضمام إلى غرفة
+        function joinGame() {
+            const roomCode = document.getElementById('roomCode').value.trim().toUpperCase();
+            
+            if (!roomCode || roomCode.length !== 6) {
+                showMessage('⚠️ كود الغرفة يجب أن يكون 6 أحرف', 'error');
+                return;
+            }
+            
+            const gameRef = database.ref('games/' + roomCode);
+            
+            gameRef.once('value').then(snapshot => {
+                if (snapshot.exists()) {
+                    const game = snapshot.val();
+                    
+                    if (game.status === 'waiting') {
+                        // التحقق من عدم انضمام اللاعب مسبقاً
+                        if (game.players[playerId]) {
+                            window.location.href = `game.html?room=${roomCode}&player=${playerId}`;
+                            return;
+                        }
+                        
+                        // احصل على جميع اللاعبين
+                        const players = Object.keys(game.players);
+                        const playerSymbol = players.length === 1 ? 'O' : null;
+                        
+                        if (playerSymbol) {
+                            gameRef.update({
+                                [`players/${playerId}`]: playerSymbol,
+                                status: 'playing'
+                            }).then(() => {
+                                window.location.href = `game.html?room=${roomCode}&player=${playerId}`;
+                            });
+                        } else {
+                            showMessage('🚫 الغرفة ممتلئة', 'error');
+                        }
+                    } else if (game.status === 'playing') {
+                        // إذا كان اللاعب ضمن اللعبة بالفعل
+                        if (game.players[playerId]) {
+                            window.location.href = `game.html?room=${roomCode}&player=${playerId}`;
+                        } else {
+                            showMessage('🚫 اللعبة جارية بالفعل', 'error');
+                        }
+                    } else {
+                        showMessage('❌ الغرفة مغلقة', 'error');
+                    }
+                } else {
+                    showMessage('❌ لم أجد غرفة بهذا الكود', 'error');
+                }
+            }).catch(error => {
+                showMessage(`❌ خطأ: ${error.message}`, 'error');
+            });
+        }
+
+        // 📌 وظائف مساعدة
+        function generateRoomCode() {
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+            let code = '';
+            for (let i = 0; i < 6; i++) {
+                code += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return code;
+        }
+
+        function showMessage(text, type) {
+            const messageDiv = document.getElementById('message');
+            messageDiv.textContent = text;
+            messageDiv.className = type;
+            messageDiv.style.display = 'block';
+            
+            // إخفاء الرسالة بعد 5 ثواني
+            setTimeout(() => {
+                messageDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        function copyLink() {
+            const shareLink = document.getElementById('shareLink');
+            const textToCopy = shareLink.textContent;
+            
+            navigator.clipboard.writeText(textToCopy).then(() => {
+                alert('✅ تم نسخ الرابط! أرسله لصديقك');
+            }).catch(err => {
+                console.error('فشل النسخ: ', err);
+            });
+        }
+
+        // 📌 السماح بالدخول عبر الرابط المباشر
+        window.onload = function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const roomParam = urlParams.get('room');
+            
+            if (roomParam) {
+                document.getElementById('roomCode').value = roomParam;
+                // انضم تلقائياً بعد ثانيتين
+                setTimeout(() => {
+                    joinGame();
+                }, 2000);
+            }
+        };
+    </script>
+</body>
+</html>
